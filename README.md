@@ -1,2 +1,3 @@
 # musicalization
-Ancient Voices of Code / PROG Rock
+
+Music and source code are not too different from each other as you might think.
