@@ -1,15 +1,15 @@
 #lang scribble/lp2
 
-@require[@for-label[scribble/manual
-                    racket/control
+@require[scribble/manual]
+
+@require[@for-label[racket
                     racket/match
                     syntax/parse
-                    racket/pretty
-                    (only-in racket/base #%module-begin)]]
+                    racket/pretty]]
 
-@title{Data structures for music}
+@title[#:style manual-doc-style]{Data structures for music}
 
-@chunk[<Syntax>
+@chunk[<*>
        (module Music racket
          (provide <provisions/music>)
          (require #;<requirements/music>)
@@ -26,13 +26,13 @@ A note is a combination of pitches (single notes are chords
 with one pitch), their duration, and any “post-events” (this
 is Lilypond terminology), which are usually articulations
 and dynamics. Elements of @code{post-events} are symbols,
-such as @code{'staccato} (Lilypond @code{-.}) or @code{'mf}
-(Lilypond @code{\mf}). We will discuss pitches later.
+such as @tt{'staccato} (Lilypond @tt{-.}) or @tt{'mf}
+(Lilypond @tt{\mf}). We will discuss pitches later.
 
 The duration of a note is conveyed by a “log” and a number
 of dots (usually 0). The log corresponds to typical note
 value terminology, so that @code{16} means a sixteenth note,
-@code{2} a half note. Whole notes have a log of @code[1],
+@code{2} a half note. Whole notes have a log of @code{1},
 and longer durations can be had by setting @code{log} to
 @code{1/2}, etc. The dots function as augmentation dots do
 in conventional notation: a @code{dots} of 1 adds half of
@@ -70,9 +70,11 @@ Tuplets are represented by @code{Tuplet}.
          (ratio
           music))]
 
+We support up to 
+
 @section{Pitches}
 
-Pitches are simply integers, with 0 meaning C0 (@code{c,,,}
+Pitches are simply integers, with 0 meaning C0 (@tt{c,,,}
 in Lilypond). For fun, we use a base-31 system, so that some
 enharmonic pitches are available. To add an octave, add 31.
 
@@ -127,7 +129,9 @@ a plain twelve-tone system, however.
                   (let ([pitch-class (pitch-class-of pitch)])
                     (- pitch (if (memq pitch '(f c))
                                  3
-                                 2)))]))
+                                 2)))]
+                 [else
+                  (subtract-interval (subtract-interval pitch 1) (- semitones 1))]))
          (cond [(= semitones 0)
                 pitch]
                [(< semitones 0)
