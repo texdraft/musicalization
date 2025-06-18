@@ -20,49 +20,58 @@
          (define (go m indentation start-of-line? space? meter)
            (define (easy m)
              (go m indentation start-of-line? space? meter))
-           (define (indent)
-             (for ([_ (in-range indentation)])
-               (display #\Space out)))
            <output-pitch>
            <output-value>
            <output-post-events>
            (define (output c)
-             (cond [(char=? c #\Newline)
-                    (if start-of-line?
-                        (void)
-                        (begin (set! start-of-line? #t)
-                               (display c out)
-                               (indent)))]
-                   [(char=? c #\Space)
-                    (if space?
-                        (void)
-                        (begin (set! space? #t)
-                               (display c out)))]
-                   [else
-                    (display c out)
-                    (set! start-of-line? #f)
-                    (set! space? #f)]))
+             <annoying-output-stuff>)
            (define (output-string s)
              (map output (string->list s)))
            (match m
              [(list ms ...)
-              (when (> (length ms) 5)
-                (output-string "\\allowBreak "))
               (output #\newline)
               (map (λ (m)
                      (easy m))
-                   ms)]
+                   ms)
+              (when (> (count Note? ms) 5)
+                (output-string "\n\\allowBreak "))]
              <measure-cases>
              <note-cases>
              <tuplet-cases>
-             [(Polyphony voice-1 voice-2)
-              (output-string "\n<<\n{\n")
-              (go voice-1 (+ indentation 4) #f #f meter)
-              (output-string " }\n\\\\ { \n")
-              (indent)
-              (go voice-2 (+ indentation 4) #f #f meter)
-              (output-string "}\n>>")]))
-         (go m 2 #f #f #f))]
+             <polyphony-case>))
+         (go m 2 #t #f #f))]
+
+@chunk[<annoying-output-stuff>
+       (cond [(char=? c #\newline)
+              (if start-of-line?
+                  (void)
+                  (begin (set! start-of-line? #t)
+                         (set! space? #f)
+                         (display c out)
+                         (for ([_ (in-range indentation)])
+                           (display #\space out))))]
+             [(char=? c #\space)
+              (if space?
+                  (void)
+                  (begin (set! space? #t)
+                         (set! start-of-line? #f)
+                         (display c out)))]
+             [else
+              (display c out)
+              (set! start-of-line? #f)
+              (set! space? #f)])]
+
+@chunk[<polyphony-case>
+       [(Polyphony voice-1 voice-2)
+        (output-string "\n<<")
+        (set! indentation (+ indentation 2))
+        (output-string "\n{\n")
+        (go voice-1 (+ indentation 4) #f #f meter)
+        (output-string "\n}\n\\\\\n{\n")
+        (go voice-2 (+ indentation 4) #f #f meter)
+        (output-string "\n}\n")
+        (set! indentation (- indentation 2))
+        (output-string ">>\n")]]
 
 We simplify pointless tuplets.
 
@@ -70,17 +79,16 @@ We simplify pointless tuplets.
        [(Tuplet 1/1 music)
         (easy music)]
        [(Tuplet ratio music)
-        (output-string (format "\\tuplet ~A {\n" ratio))
-        (indent)
+        (output-string (format "\n\\tuplet ~A {" ratio))
         (go music (+ indentation 2) #f #f meter)
-        (displayln "}" out)]]
+        (output-string "\n}\n")]]
 
 @chunk[<measure-cases>
        [(Measure 0 0 m label)
         (output-string (format "\\mark \"~A\"\n" label))
         (cond [(not meter)
                (easy m)
-               (output-string "\\bar \"||\"")]
+               (output-string "\\bar \"||\"\n")]
               [else
                (set! meter #f)
                (output-string "\\cadenzaOn\n")
@@ -107,13 +115,13 @@ We simplify pointless tuplets.
                (map (λ (p)
                       (output-pitch p)
                       (set! l (- l 1))
-                      (unless (<= l 1)
+                      (unless (< l 1)
                         (output #\Space)))
                     pruned)
                (output #\>)])
         (output-value log dots)
         (output-post-events post-events)
-        (output #\Space)]]
+        (output #\space)]]
 
 @chunk[<requirements/output>
        (submod "music.rkt" Music)]
@@ -140,37 +148,36 @@ We simplify pointless tuplets.
 @chunk[<output-post-events>
        (define (output-post-events post-events)
          (map (λ (e)
-                (display (case e
-                           [(staccato) "-."]
-                           [(marcato) "-^"]
-                           [(slur-begin) "-("]
-                           [(slur-end) "-)"]
-                           [(accent) "->"]
-                           [(crescendo-begin) "\\<"]
-                           [(crescendo-end) "\\!"]
-                           [(diminuendo-begin) "\\>"]
-                           [(diminuendo-end) "\\!"]
-                           [(sustain-begin) "\\sustainOn"]
-                           [(sustain-end) "\\sustainOff"]
-                           [(beam-begin) "-["]
-                           [(beam-end) "-]"]
-                           [(pppp
-                             ppp
-                             pp
-                             p
-                             mp
-                             mf
-                             f
-                             ff
-                             fff
-                             ffff
-                             fz
-                             rfz
-                             sf)
-                            (format "\\~A" e)]
-                           [else
-                            (display e)
-                            (error "what?")])
-                         out))
+                (output-string (case e
+                                 [(staccato) "-."]
+                                 [(marcato) "-^"]
+                                 [(slur-begin) "-("]
+                                 [(slur-end) "-)"]
+                                 [(accent) "->"]
+                                 [(crescendo-begin) "\\<"]
+                                 [(crescendo-end) "\\!"]
+                                 [(diminuendo-begin) "\\>"]
+                                 [(diminuendo-end) "\\!"]
+                                 [(sustain-begin) "\\sustainOn"]
+                                 [(sustain-end) "\\sustainOff"]
+                                 [(beam-begin) "-["]
+                                 [(beam-end) "-]"]
+                                 [(pppp
+                                   ppp
+                                   pp
+                                   p
+                                   mp
+                                   mf
+                                   f
+                                   ff
+                                   fff
+                                   ffff
+                                   fz
+                                   rfz
+                                   sf)
+                                  (format "\\~A" e)]
+                                 [else
+                                  (display e)
+                                  (error "what?")])))
               post-events)
-         (display #\Space out))]
+         (output #\space))]
