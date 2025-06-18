@@ -41,44 +41,108 @@ adds half of the duration, plus half of that half, for 1.75
 the duration according to the @code{log}; a @code{dots} of 3
 effectively multiplies the duration by 1.875, and so on.
 
-Rests are like notes but don't have pitches.
+Rests are notes that don't have pitches.
 
 @chunk[<music>
        (struct Note
          (pitches
           log
           dots
-          post-events))
-
-       (struct Rest
-         (log
-          dots
-          post-events))]
+          post-events)
+         #:mutable)]
 
 @chunk[<provisions/music>
-       (struct-out Note)
-       (struct-out Rest)]
+       (struct-out Note)]
 
 In a music tree, a sequence of notes is a list of
 @code{Note} or @code{Rest} objects. Nested lists will be
 flattened in the output.
 
-Tuplets are represented by @code{Tuplet}.
+Durations other than those based on powers of two have to be
+expressed using tuplets.
 
 @chunk[<music>
        (struct Tuplet
          (ratio
           music))]
 
-We support up to 
+Music should be divided into measures. There need not be a
+meter; use 0 for the numerator and denominator in that case.
+
+@chunk[<music>
+       (struct Measure
+         (numerator
+          denominator
+          music))]
+
+We support two voices.
+
+@chunk[<music>
+       (struct Polyphony
+         (voice-1
+          voice-2))]
+
+@chunk[<provisions/music>
+       (struct-out Tuplet)
+       (struct-out Polyphony)
+       (struct-out Measure)]
+
+We will often need to traverse music.
+
+@chunk[<music>
+       (define (map-notes f music)
+         (match music
+           [(list ms ...)
+            (flatten (map (λ (m)
+                            (map-notes f m))
+                          ms))]
+           [(Note _ _ _ _)
+            (f music)]
+           [(Tuplet ratio inner)
+            (Tuplet ratio (map-notes f inner))]
+           [(Polyphony voice-1 voice-2)
+            (Polyphony (map-notes f voice-1)
+                       (map-notes f voice-2))]))
+
+       (define (extract-notes music)
+         (match music
+           [(list ms ...)
+            (flatten (map extract-notes ms))]
+           [(Note _ _ _ _)
+            (list music)]
+           [(Tuplet _ m)
+            (extract-notes m)]
+           [(Polyphony voice-1 voice-2)
+            (append (extract-notes voice-1)
+                    (extract-notes voice-2))]))]
+
+@chunk[<provisions/music>
+       map-notes]
+
+@chunk[<music>
+       (define (add-post-event! note event)
+         (set-Note-post-events! note (cons event (Note-post-events note))))
+
+       (define (add-pitch! note pitch)
+         (set-Note-pitches! note (cons pitch (Note-pitches note))))]
+
+@chunk[<provisions/music>
+       add-post-event!
+       add-pitch!]
 
 @section{Pitches}
 
-Pitches are simply integers, with 0 meaning C0 (@tt{c,,,}
+Pitches are combinations of integers and an alteration. The
+integer represents the basic pitch, with 0 meaning C0 (@tt{c,,,}
 in Lilypond). For fun, we use a base-31 system, so that some
 enharmonic pitches are available. To add an octave, add 31.
 
+The alteration is supposed to be used for microtonal stuff.
+
 @chunk[<music>
+       (struct Pitch
+         (number
+          alteration))
        (define pitch-classes '(c deses cis des cisis
                                d eeses dis es disis
                                e fes eis
@@ -102,15 +166,17 @@ enharmonic pitches are available. To add an octave, add 31.
          (vector-ref pitch-vector integer))
 
        (define (pitch-class-of pitch)
-         (vector-ref pitch-vector (modulo pitch 31)))
+         (vector-ref pitch-vector (modulo (Pitch-number pitch) 31)))
 
        (define (octave-of pitch)
-         (quotient pitch 31))
+         (quotient (Pitch-number pitch) 31))
 
-       (define (make-pitch pitch-class octave)
-         (+ (hash-ref pitch-hash pitch-class) (* 31 octave)))]
+       (define (make-pitch pitch-class octave [alteration 0])
+         (Pitch (+ (hash-ref pitch-hash pitch-class) (* 31 octave))
+                alteration))]
 
 @chunk[<provisions/music>
+       (struct-out Pitch)
        pitch-class->integer
        integer->pitch-class
        pitch-class-of
@@ -124,25 +190,113 @@ a plain twelve-tone system, however.
 
 @chunk[<music>
        (define (add-interval pitch semitones)
-         (define (subtract-interval pitch semitones)
-           (cond [(= semitones 1)
+         (let ([number (Pitch-number pitch)])
+           (define (subtract-interval pitch semitones)
+             (cond [(= semitones 1)
+                    (let ([pitch-class (pitch-class-of pitch)])
+                      (Pitch (- (Pitch-number pitch) (if (memq pitch-class '(f c))
+                                                         3
+                                                         2))
+                             (Pitch-alteration pitch)))]
+                   [else
+                    (subtract-interval (subtract-interval pitch 1) (- semitones 1))]))
+           (cond [(= semitones 0)
+                  pitch]
+                 [(< semitones 0)
+                  (subtract-interval pitch (abs semitones))]
+                 [(= semitones 1)
                   (let ([pitch-class (pitch-class-of pitch)])
-                    (- pitch (if (memq pitch '(f c))
-                                 3
-                                 2)))]
+                    (Pitch (+ number (if (memq pitch-class '(e b))
+                                         3
+                                         2))
+                           (Pitch-alteration pitch)))]
                  [else
-                  (subtract-interval (subtract-interval pitch 1) (- semitones 1))]))
-         (cond [(= semitones 0)
-                pitch]
-               [(< semitones 0)
-                (subtract-interval pitch (abs semitones))]
-               [(= semitones 1)
-                (let ([pitch-class (pitch-class-of pitch)])
-                  (+ pitch (if (memq pitch '(e b))
-                               3
-                               2)))]
-               [else
-                (add-interval (add-interval pitch 1) (- semitones 1))]))]
+                  (add-interval (add-interval pitch 1) (- semitones 1))])))]
+
+@chunk[<music>
+       (define (pitch< p1 p2)
+         (match* (p1 p2)
+           [((Pitch n1 _) (Pitch n2 _))
+            (< n1 n2)]))
+
+       (define (pitch= p1 p2)
+         (match* (p1 p2)
+           [((Pitch n1 a1) (Pitch n2 a2))
+            (and (= n1 n2)
+                 (= a1 a2))]))]
+
+We do our own transposition, so that we can clamp the
+results into range before outputting Lilypond.
+
+@chunk[<music>
+       (define (transpose music amount)
+         (map-notes (λ (note)
+                      (match note
+                        [(Note pitches log dots post-events)
+                         (Note (map (λ (p)
+                                      (add-interval p amount))
+                                    pitches)
+                               log
+                               dots
+                               post-events)]))
+                    music))]
+
+And speaking of clamping:
+
+@chunk[<music>
+       (define (clamp music lower upper)
+         (map-notes (λ (note)
+                      (match note
+                        [(Note pitches log dots post-events)
+                         (Note (map (λ (p)
+                                      (cond [(pitch< p lower)]))
+                                    pitches)
+                               log
+                               dots
+                               post-events)]))))]
+
+This function adds a post-event to the first and last note
+in some music, unless the music consists of only one note.
+
+@chunk[<music>
+       (define (add-event-first-last! m e1 e2)
+         (let ([l (extract-notes m)])
+           (add-post-event! (first l) e1)
+           (add-post-event! (last l) e2))
+         m)
+
+       (define (add-event-first! m e)
+         (let ([l (extract-notes m)])
+           (add-post-event! (first l) e))
+         m)]
 
 @chunk[<provisions/music>
-       add-interval]
+       add-interval
+       clamp
+       transpose
+       add-event-first-last!
+       add-event-first!]
+
+Here are some utility functions for generating music.
+
+@chunk[<music>
+       (define (increase-dynamic dynamic)
+         (if (eqv? dynamic 'ffff)
+             'ffff
+             (cadr (member dynamic '(pppp ppp pp p mp mf f ff fff ffff)))))
+
+       (define (decrease-dynamic dynamic)
+         (if (eqv? dynamic 'pppp)
+             'pppp
+             (cadr (member dynamic '(ffff fff ff f mf mp p pp ppp pppp)))))
+
+       (define (nearest-power-of-two n)
+         (let loop ([i 0])
+           (if (>= (expt 2 i) n)
+               (expt 2 (- i 1))
+               (loop (+ i 1)))))]
+
+@chunk[<provisions/music>
+       increase-dynamic
+       decrease-dynamic
+       nearest-power-of-two]
