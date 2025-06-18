@@ -73,7 +73,8 @@ meter; use 0 for the numerator and denominator in that case.
        (struct Measure
          (numerator
           denominator
-          music))]
+          music
+          label))]
 
 We support two voices.
 
@@ -185,12 +186,12 @@ The alteration is supposed to be used for microtonal stuff.
 
 The major advantage of integers over a symbolic
 representation is that operations on pitches are easier.
-Enharmonics make this slightly more annoying than if we used
-a plain twelve-tone system, however.
 
 @chunk[<music>
-       (define (add-interval pitch semitones)
-         (let ([number (Pitch-number pitch)])
+       (define (add-interval pitch 31tones)
+         (Pitch (+ (Pitch-number pitch) 31tones)
+                (Pitch-alteration pitch))
+         #;(let ([number (Pitch-number pitch)])
            (define (subtract-interval pitch semitones)
              (cond [(= semitones 1)
                     (let ([pitch-class (pitch-class-of pitch)])

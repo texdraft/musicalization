@@ -45,13 +45,15 @@
            (define (output-string s)
              (map output (string->list s)))
            (match m
-             <measure-cases>
-             <note-cases>
              [(list ms ...)
+              (when (> (length ms) 5)
+                (output-string "\\allowBreak "))
               (output #\newline)
               (map (λ (m)
                      (easy m))
                    ms)]
+             <measure-cases>
+             <note-cases>
              <tuplet-cases>
              [(Polyphony voice-1 voice-2)
               (output-string "\n<<\n{\n")
@@ -60,7 +62,7 @@
               (indent)
               (go voice-2 (+ indentation 4) #f #f meter)
               (output-string "}\n>>")]))
-         (go m 0 #f #f #f))]
+         (go m 2 #f #f #f))]
 
 We simplify pointless tuplets.
 
@@ -74,7 +76,8 @@ We simplify pointless tuplets.
         (displayln "}" out)]]
 
 @chunk[<measure-cases>
-       [(Measure 0 0 m)
+       [(Measure 0 0 m label)
+        (output-string (format "\\mark \"~A\"\n" label))
         (cond [(not meter)
                (easy m)
                (output-string "\\bar \"||\"")]
@@ -82,7 +85,8 @@ We simplify pointless tuplets.
                (set! meter #f)
                (output-string "\\cadenzaOn\n")
                (easy m)])]
-       [(Measure n d m)
+       [(Measure n d m label)
+        (output-string (format "\\mark \"~A\"\n" label))
         (when (not meter)
           (output-string "\\cadenzaOff\n"))
         (output-string (format "\\time ~A/~A~%" n d))
@@ -94,14 +98,18 @@ We simplify pointless tuplets.
         (output-value log dots)
         (output-post-events post-events)]
        [(Note (list pitches ...) log dots post-events)
-        (cond [(null? (rest pitches))
-               (output-pitch (first pitches))]
+        (define pruned (remove-duplicates pitches = #:key Pitch-number))
+        (define l (length pruned))
+        (cond [(null? (rest pruned))
+               (output-pitch (first pruned))]
               [else
                (output #\<)
                (map (λ (p)
                       (output-pitch p)
-                      (output #\Space))
-                    pitches)
+                      (set! l (- l 1))
+                      (unless (<= l 1)
+                        (output #\Space)))
+                    pruned)
                (output #\>)])
         (output-value log dots)
         (output-post-events post-events)

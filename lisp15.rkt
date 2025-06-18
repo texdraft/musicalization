@@ -58,8 +58,8 @@ musicalizer passes around some state.
                                       31)))
               (string->list text)))
 
-       (define major-intervals '(0 2 4 5 7 9 11))
-       (define minor-intervals '(0 2 3 5 7 8 10))
+       (define major-intervals '(0 5 10 13 18 23 28))
+       (define minor-intervals '(0 5 8 13 15 20 26))
        (define harmonic-minor-intervals '(0 2 3 5 7 8 11))
 
        (define (tonal-pitcher text state)
@@ -69,11 +69,11 @@ musicalizer passes around some state.
                                           (+ (State-octave state)
                                              (cond [(<= 0 code 24)
                                                     -1]
-                                                   [(<= 27 code 36)
+                                                   [(<= 24 code 42)
                                                     0]
                                                    [else
-                                                    1])))
-                              (list-ref (case 'major
+                                                    +1])))
+                              (list-ref (case (unbox (State-mode state))
                                           ((major) major-intervals)
                                           ((minor) minor-intervals)
                                           ((harmonic-minor) harmonic-minor-intervals))
@@ -93,10 +93,11 @@ musicalizer passes around some state.
                      (map (λ (thing)
                             (match thing
                               [`(,name ,e)
-                               (Measure 0 0 (musicalize-expression e (make-state state)))]))
+                               (Measure 0 0 (musicalize-expression e (make-state state)) (symbol->string name))]))
                           things)]
                     [_
-                     (Measure 0 0 (musicalize-expression form state))]))
+                     (Measure 0 0 (musicalize-expression form state)
+                              (~a form))]))
                 forms)))]
 
 @chunk[<l15>
@@ -130,6 +131,8 @@ musicalizer passes around some state.
               (set-box! tonic (pitch-class-of (add-interval (make-pitch (unbox tonic) 0) 5)))
               (add-event-first! (musicalize-symbol tag state)
                                 (increase-dynamic (unbox dynamic)))]
+             [`(not ,e)
+              (musicalize-expression e (make-state state #:mode (box 'minor)))]
              [`(prog (,vs ...) ,body ...)
               (let* ([count (length vs)]
                      [ratio (if (>= count 3)
@@ -141,6 +144,10 @@ musicalizer passes around some state.
                                                            'accent)
                                          (musicalize-expression item state)))
                                    body)))]
+             [`(return ,e)
+              (musicalize-expression e (make-state state
+                                                   #:log (/ log 2)
+                                                   #:tonic (box 'a)))]
              [`(function ,e)
               (add-event-first-last! (musicalize-expression e state)
                                      'sustain-begin
@@ -345,12 +352,7 @@ music = \\naturalizeMusic {
 }
 "
                   (let ([out (open-output-string)])
-                    (map (λ (measure)
-                           (match measure
-                             [(Measure _ _ music)
-                              (output-music music out)
-                              (displayln "\\bar \"||\"" out)]))
-                         (flatten measures))
+                    (output-music measures out)
                     (get-output-string out))
                   (if score?
                       "  \\layout {
