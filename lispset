@@ -1,4 +1,4 @@
-|0123456789= +abcdefghi.)-jklmnopqr$* /stuvwxyz,(| ()
+|0123456789="+abcdefghi.)-jklmnopqr$* /stuvwxyz,(| ()
 
 attrib (DEF1 (expr (LAMBDA (OB l)
   (prog nil
