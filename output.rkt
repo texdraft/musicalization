@@ -15,6 +15,11 @@
          (require <requirements/output>)
          <output>)]
 
+The conventions for representing music are illustrated by
+the output procedures, which turn the internal data
+structures into Lilypond input. Humans aren't supposed to
+read the result, but for debugging purposes we keep it tidy.
+
 @chunk[<output>
        (define (output-music m [out (current-output-port)])
          (define (go m indentation start-of-line? space? meter)
@@ -38,8 +43,19 @@
              <measure-cases>
              <note-cases>
              <tuplet-cases>
-             <polyphony-case>))
+             <polyphony-case>
+             [else
+              (displayln m)]))
          (go m 2 #t #f #f))]
+
+@chunk[<requirements/output>
+       (submod "music.rkt" Music)]
+
+@chunk[<provisions/output>
+       output-music]
+
+Here we try to avoid extraneous whitespace, although I
+haven't got it exactly right yet…
 
 @chunk[<annoying-output-stuff>
        (cond [(char=? c #\newline)
@@ -61,6 +77,8 @@
               (set! start-of-line? #f)
               (set! space? #f)])]
 
+… namely when the following code is run.
+
 @chunk[<polyphony-case>
        [(Polyphony voice-1 voice-2)
         (output-string "\n<<")
@@ -73,7 +91,9 @@
         (set! indentation (- indentation 2))
         (output-string ">>\n")]]
 
-We simplify pointless tuplets.
+We simplify a trivial case of pointless tuplets. However,
+things like a series of dotted notes inside a triplet are
+left alone.
 
 @chunk[<tuplet-cases>
        [(Tuplet 1/1 music)
@@ -83,9 +103,13 @@ We simplify pointless tuplets.
         (go music (+ indentation 2) #f #f meter)
         (output-string "\n}\n")]]
 
+An empty measure can be used to output a @code{\mark}.
+
 @chunk[<measure-cases>
+       [(Measure _ _ '() label)
+        (output-string (format "\\mark \"~A\"\n" (escape label)))]
        [(Measure 0 0 m label)
-        (output-string (format "\\mark \"~A\"\n" label))
+        (output-string (format "\\mark \"~A\"\n" (escape label)))
         (cond [(not meter)
                (easy m)
                (output-string "\\bar \"||\"\n")]
@@ -99,6 +123,12 @@ We simplify pointless tuplets.
           (output-string "\\cadenzaOff\n"))
         (output-string (format "\\time ~A/~A~%" n d))
         (easy m)]]
+
+@chunk[<output>
+       (define (escape text)
+         (string-replace text "\"" "\\\""))]
+
+Duplicate pitches in chords are removed before output.
 
 @chunk[<note-cases>
        [(Note '() log dots post-events)
@@ -122,12 +152,6 @@ We simplify pointless tuplets.
         (output-value log dots)
         (output-post-events post-events)
         (output #\space)]]
-
-@chunk[<requirements/output>
-       (submod "music.rkt" Music)]
-
-@chunk[<provisions/output>
-       output-music]
 
 @chunk[<output-pitch>
        (define (output-pitch pitch)

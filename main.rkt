@@ -2,14 +2,15 @@
 
 @chunk[<*>
        (require (submod "lisp15.rkt" LISP15))
-       (define (main)
-         (call-with-input-file "lispset"
+       (define (do-file in out)
+         (call-with-input-file in
            (λ (in)
-             (call-with-output-file "musicalized-lispset.ly"
+             (call-with-output-file out
                #:exists 'replace
                (λ (out)
-                 (lily (musicalize-file in tonal-pitcher)
+                 (lily (musicalize-file in pentatonic-pitcher)
                        out
                        #t))))))
 
-       (main)]
+       (do-file "lispset" "musicalized-lispset.ly")
+       (do-file "reduce" "musicalized-reduce.ly")]
